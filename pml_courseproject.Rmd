@@ -1,0 +1,120 @@
+---
+title: "Practical Machine Learning Course Project Write-up"
+author: "Sylvia Seow"
+date: "August 19, 2015"
+output: html_document
+---
+
+##Executive Summary
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement - a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, your goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. More information is available from the website here: <http://groupware.les.inf.puc-rio.br/har> (see the section on the Weight Lifting Exercise Dataset). 
+
+
+##Input Data
+We will initialise by loading neccessary library
+
+```{r}
+library(caret)
+library(randomForest)
+library(rpart)
+set.seed(8888)
+```
+
+High level description of the raw data and detailed data description for this project has come from source: <http://groupware.les.inf.puc-rio.br/har>.
+
+We will load the csv file downloaded into R
+```{r}
+train<-read.csv("pml-training.csv",na.strings=c("NA",""), strip.white = T)
+test <-read.csv("pml-testing.csv", na.strings=c("NA",""), strip.white = T)
+```
+
+
+##Formatting and cleaning data
+Below code fragment is to clean and prepare the dataset for further processing, that step including the treatment of null value for data
+```{r}
+isNA.train <- apply(train, 2, function(x) { sum(is.na(x)) })
+isNA.test <- apply(test, 2, function(x) { sum(is.na(x)) })
+training <- subset(train[, which(isNA.train == 0)], 
+                   select=-c(X, user_name, new_window, num_window, raw_timestamp_part_1, raw_timestamp_part_2, cvtd_timestamp))
+testing <- subset(test[, which(isNA.test == 0)], 
+                              select=-c(X, user_name, new_window, num_window, raw_timestamp_part_1, raw_timestamp_part_2, cvtd_timestamp))
+```
+
+We will create data partitition 60% for training and testing data.
+```{r}
+pml.training.index <- createDataPartition(y=training$classe,p=0.6,list=FALSE)
+pml.training.train <- training[pml.training.index,]
+pml.training.test <- training[-pml.training.index,]
+
+dim(pml.training.train)
+dim(pml.training.test)
+
+```
+
+## Analyse (Model Testing & Selection)
+Below model used as shown:
+
+###Linear Discriminative Analysis
+```{r}
+model.lda <- train(classe ~., method="lda", data=pml.training.train)
+confusionMatrix(pml.training.train$classe, predict(model.lda, pml.training.train))
+```
+
+###Trees
+```{r}
+model.tree <- train(classe ~., method="rpart", data=pml.training.train)
+confusionMatrix(pml.training.train$classe, predict(model.tree, pml.training.train))
+```
+
+###Random Forest
+```{r}
+model.randForest <- randomForest(classe~ .,data=pml.training.train)
+confusionMatrix(pml.training.train$classe, predict(model.randForest, pml.training.train))
+```
+
+##Details on Random Forest Model
+It seems that random forest provide the result with best "accuracy". the 
+We then use the model to predict the classe value for the 6 participants in the testing dataset. We also apply the model on the validation dataset to determine the accuracy of the selected model. The OOB estimate of error is 0.65% which is excellent, the Confusion matrix looks good too. Next, we will take the look at the variable importance.
+
+```{r}
+var.imp <- varImp(model.randForest)
+var.imp$variable_name <- row.names(var.imp)
+var.imp[order(var.imp$Overall, decreasing=TRUE),]
+```
+
+we will apply the model to validation dataset and testing dataset from csv file
+
+```{r}
+pml.val <- predict(model.randForest,newdata=pml.training.test)
+pml.pred <- predict(model.randForest,newdata=testing)
+result.test <-predict(model.randForest,testing)
+```
+
+##Testing & Result
+Let's calculate the Out of Sample Error rate, or generalisation error, and the accuracy of the model based on the validation sub set of data that was used. 
+```{r}
+#calculate error rate and accuracy of the validation 
+ose.acc <- sum(pml.val == pml.training.test$classe)/length(pml.val)
+ose.err <- (1 - ose.acc) 
+##show confusion matrix
+confusionMatrix(pml.training.test$classe,pml.val)
+ose.acc
+ose.err
+```
+
+##Evaluation
+The achieved error value is below 5% and the prediction accurary close to 100%. So this is the best model to be used, although it does a long time to generate the model.
+
+The final result on the testing dataset (test csv) is 20 correct prediction out of 20. So the accuracy is 100%
+
+##Submission for grading
+```{r}
+## evaluate testing
+pml_write_files = function(x){
+  n = length(x)
+  for(i in 1:n){
+    filename = paste0("problem_id_",i,".txt")
+    write.table(x[i],file=filename,quote=FALSE,row.names=FALSE,col.names=FALSE)
+  }
+}
+pml_write_files(result.test)
+```
