@@ -2,7 +2,7 @@
 title: "Practical Machine Learning Course Project Write-up"
 author: "Sylvia Seow"
 date: "August 19, 2015"
-output: html_document
+output: pdf_document
 ---
 
 ##Executive Summary
@@ -39,7 +39,9 @@ testing <- subset(test[, which(isNA.test == 0)],
                               select=-c(X, user_name, new_window, num_window, raw_timestamp_part_1, raw_timestamp_part_2, cvtd_timestamp))
 ```
 
-We will create data partitition 60% for training and testing data.
+##Cross Validation/data spilting
+We will create data partitition 60% for training and testing data. The method we use here is just simple hold-out, by spilting data into 2 set, which is training and another for testing
+
 ```{r}
 pml.training.index <- createDataPartition(y=training$classe,p=0.6,list=FALSE)
 pml.training.train <- training[pml.training.index,]
@@ -67,18 +69,24 @@ confusionMatrix(pml.training.train$classe, predict(model.tree, pml.training.trai
 
 ###Random Forest
 ```{r}
-model.randForest <- randomForest(classe~ .,data=pml.training.train)
+model.randForest <- train(classe ~., model=FALSE, method="rf", data=pml.training.train,ntree=100,prox=TRUE)
 confusionMatrix(pml.training.train$classe, predict(model.randForest, pml.training.train))
 ```
 
 ##Details on Random Forest Model
 It seems that random forest provide the result with best "accuracy". the 
 We then use the model to predict the classe value for the 6 participants in the testing dataset. We also apply the model on the validation dataset to determine the accuracy of the selected model. The OOB estimate of error is 0.65% which is excellent, the Confusion matrix looks good too. Next, we will take the look at the variable importance.
-
+```{r}
+plot(model.randForest, log = "y", 
+     main = "Model accuracy", 
+     xlab = "Predictors", 
+     ylab = "Accuracy")
+```
 ```{r}
 var.imp <- varImp(model.randForest)
-var.imp$variable_name <- row.names(var.imp)
-var.imp[order(var.imp$Overall, decreasing=TRUE),]
+var.imp
+##var.imp$variable_name <- row.names(var.imp)
+##var.imp[order(var.imp$Overall, decreasing=TRUE),]
 ```
 
 we will apply the model to validation dataset and testing dataset from csv file
@@ -97,7 +105,9 @@ ose.acc <- sum(pml.val == pml.training.test$classe)/length(pml.val)
 ose.err <- (1 - ose.acc) 
 ##show confusion matrix
 confusionMatrix(pml.training.test$classe,pml.val)
+## Accuracy
 ose.acc
+## Error Rate
 ose.err
 ```
 
