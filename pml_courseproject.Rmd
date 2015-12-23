@@ -1,8 +1,8 @@
 ---
 title: "Practical Machine Learning Course Project Write-up"
 author: "Sylvia Seow"
-date: "August 19, 2015"
-output: pdf_document
+date: "December 23, 2015"
+output: html_document
 ---
 
 ##Executive Summary
@@ -47,6 +47,7 @@ pml.training.index <- createDataPartition(y=training$classe,p=0.6,list=FALSE)
 pml.training.train <- training[pml.training.index,]
 pml.training.test <- training[-pml.training.index,]
 
+tc <- trainControl("cv",10,savePred=T)
 dim(pml.training.train)
 dim(pml.training.test)
 
@@ -57,44 +58,56 @@ Below model used as shown:
 
 ###Linear Discriminative Analysis
 ```{r}
-model.lda <- train(classe ~., method="lda", data=pml.training.train)
+model.lda <- train(classe ~., method="lda",trControl=tc, data=pml.training.train)
 confusionMatrix(pml.training.train$classe, predict(model.lda, pml.training.train))
 ```
 
 ###Trees
 ```{r}
-model.tree <- train(classe ~., method="rpart", data=pml.training.train)
+model.tree <- train(classe ~., method="rpart",trControl=tc, data=pml.training.train)
 confusionMatrix(pml.training.train$classe, predict(model.tree, pml.training.train))
 ```
 
-###Random Forest
+###Random Forest with cross validation using random subsampling
 ```{r}
-model.randForest <- train(classe ~., model=FALSE, method="rf", data=pml.training.train,ntree=100,prox=TRUE)
-confusionMatrix(pml.training.train$classe, predict(model.randForest, pml.training.train))
+##model.randForest <- train(classe ~., model=FALSE, method="rf",trControl=tc, data=pml.training.train,ntree=100,prox=TRUE)
+##confusionMatrix(pml.training.train$classe, predict(model.randForest, pml.training.train))
+
+first_seed <- 888
+accuracies <-c()
+for (i in 1:3){
+       set.seed(first_seed)
+       first_seed <- first_seed+1
+       trainIndex <- createDataPartition(y=training$classe, p=0.6, list=FALSE)
+       trainingSet<- training[trainIndex,]
+       testingSet<- training[-trainIndex,]
+       modelFit <- randomForest(classe ~., data = trainingSet)
+       prediction <- predict(modelFit, testingSet)
+       testingSet$rightPred <- prediction == testingSet$classe
+       t<-table(prediction, testingSet$classe)
+       print(t)
+       accuracy <- sum(testingSet$rightPred)/nrow(testingSet)
+       accuracies <- c(accuracies,accuracy)
+       print(accuracy)
+}
+
 ```
 
 ##Details on Random Forest Model
 It seems that random forest provide the result with best "accuracy". the 
 We then use the model to predict the classe value for the 6 participants in the testing dataset. We also apply the model on the validation dataset to determine the accuracy of the selected model. The OOB estimate of error is 0.65% which is excellent, the Confusion matrix looks good too. Next, we will take the look at the variable importance.
 ```{r}
-plot(model.randForest, log = "y", 
-     main = "Model accuracy", 
-     xlab = "Predictors", 
-     ylab = "Accuracy")
-```
-```{r}
-var.imp <- varImp(model.randForest)
-var.imp
-##var.imp$variable_name <- row.names(var.imp)
-##var.imp[order(var.imp$Overall, decreasing=TRUE),]
+var.imp <- varImp(modelFit)
+var.imp$variable_name <- row.names(var.imp)
+var.imp[order(var.imp$Overall, decreasing=TRUE),]
 ```
 
 we will apply the model to validation dataset and testing dataset from csv file
 
 ```{r}
-pml.val <- predict(model.randForest,newdata=pml.training.test)
-pml.pred <- predict(model.randForest,newdata=testing)
-result.test <-predict(model.randForest,testing)
+pml.val <- predict(modelFit,newdata=pml.training.test)
+pml.pred <- predict(modelFit,newdata=testing)
+result.test <-predict(modelFit,testing)
 ```
 
 ##Testing & Result
